@@ -3,22 +3,92 @@ name: Bitrix
 
 baseUrl: https://raw.githubusercontent.com/jelastic-jps/
 
+onBeforeInit: |-
+  import com.hivext.api.Response;
+  
+  var lsAppid = "9e6afcf310004ac84060f90ff41a5aba";
+  var isLS = jelastic.dev.apps.GetApp(lsAppid),
+    settings = jps.settings,
+    fields = [];
+  
+  for (var i = 0, field; field = jps.settings.fields[i]; i++)
+    fields[field.name] = field;
+  
+  if (isLS.result == 0 || isLS.result == Response.PERMISSION_DENIED) {  
+    fields["ls-addon"].hidden = false;
+    fields["ls-addon"].value = true;
+  } else {
+    fields["ls-addon"].hidden = true;
+    fields["ls-addon"].value = false;
+    fields["ls-addon"].showIf = null;
+  }
+  
+  return {
+    result: 0,
+    settings: settings
+  };
+  
+onBeforeInstall: |-
+  var nodes = [];
+  if ('${settings.ls-addon:false}'== 'true') {
+    nodes.push({
+      nodeType: "litespeedadc",
+      nodeGroup: "bl",
+      cloudlets: 8,
+      count: 2
+    },{
+      nodeType: "litespeedphp",
+      links: "sqldb:DB",
+      nodeGroup: "cp",
+      cloudlets: 16,
+      count: 2
+    });
+  } else {
+    nodes.push({
+      nodeType: "nginx",
+      links: "sqldb:DB",
+      nodeGroup: "bl",
+      cloudlets: 16,
+      count: 2
+    }, {
+      nodeType: "nginxphp",
+      links: "sqldb:DB",
+      nodeGroup: "cp",
+      cloudlets: 16,
+      count: 2
+    });
+  }
+  
+  nodes.push({
+    nodeType: "mysql",
+    cloudlets: 10,
+    count: 2
+  }, {
+    nodeType: "memcached",
+    cloudlets: 16,
+    count: 2
+  });
+  
+  return {
+    result: 0,
+    nodes: nodes
+  }
+
 globals:
   DB_USER: bitrix
   DB_PASS: ${fn.password(8)}
 
+settings:
+  fields:
+    - caption: Install LiteSpeed High-Performance Web Server
+      type: checkbox
+      name: ls-addon
+      value: true
+      disabled: false
+      tooltip: "If this option is disabled, the cluster will be installed using NGINX load balancer and application servers"
+
 engine: php7.4
-nodes:
-  - nodeType: litespeedphp
-    cloudlets: 16
-    links: sqldb:DB
-    count: 2
-  - nodeType: mysql
-    cloudlets: 10
-    count: 2
-  - nodeType: memcached
-    cloudlets: 16
-    count: 2
+nodes: definedInOnBeforeInstall
     
 skipNodeEmails: true
   
